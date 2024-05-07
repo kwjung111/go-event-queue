@@ -19,8 +19,8 @@ func main() {
 		go func() {
 			c := client.NewClient("topic")
 			go c.Run(done)
-			time.Sleep(1 * time.Second)
-			//c.Pub("dfd")
+			time.Sleep(3 * time.Second)
+			c.Pub("dfd")
 			time.Sleep(10 * time.Second)
 			defer wg.Done()
 		}()
