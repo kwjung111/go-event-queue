@@ -21,19 +21,18 @@ func NewInMemoryBroker() *InMemoryBroker {
 
 func (broker *InMemoryBroker) HandleConnection(conn net.Conn) {
 	defer conn.Close()
-	go func() {
-		buffer := make([]byte, 1024)
-		for {
-			count, _ := conn.Read(buffer)
-			//conn.Write(buffer[:count])
-			if count > 0 {
-				log.Printf(fmt.Sprintf("%s", buffer[:count]))
-			}
-		}
-	}()
-	// 다른 작업 수행 가능
+
 	log.Println("Waiting for events...")
-	// 이곳에서 다른 작업을 수행하거나 대기할 수 있습니다.
+	buffer := make([]byte, 1024)
+	for {
+		count, _ := conn.Read(buffer)
+		//conn.Write(buffer[:count])
+		if count > 0 {
+			//parse topic
+			broker.Enqueue("topic", string(buffer))
+			log.Printf(fmt.Sprintf("%s", buffer))
+		}
+	}
 }
 
 func (broker *InMemoryBroker) Enqueue(topic string, event string) {
@@ -71,4 +70,8 @@ func (broker *InMemoryBroker) Commit(topic string) error {
 
 	defer broker.mutex.Lock()
 	return nil
+}
+
+func (broker *InMemoryBroker) GetQueue(topic string) []string {
+	return broker.queues[topic]
 }

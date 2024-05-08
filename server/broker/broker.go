@@ -12,6 +12,7 @@ type Broker interface {
 	Dequeue(topic string) (string, error)
 	Commit(topic string) error
 	HandleConnection(conn net.Conn)
+	GetQueue(topic string) []string
 }
 
 func RunBroker(broker Broker) {
@@ -19,8 +20,6 @@ func RunBroker(broker Broker) {
 	cfg := config.GetConfig()
 
 	info := fmt.Sprintf(":%d", cfg.Port)
-
-	fmt.Println(info)
 
 	ln, err := net.Listen("tcp", info)
 	if nil != err {
@@ -38,6 +37,6 @@ func RunBroker(broker Broker) {
 
 		log.Printf("Client %s connected", conn.RemoteAddr())
 
-		broker.HandleConnection(conn)
+		go broker.HandleConnection(conn)
 	}
 }
