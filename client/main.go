@@ -20,7 +20,7 @@ func main() {
 			c := client.NewClient("topic")
 			go c.Run(done)
 			time.Sleep(3 * time.Second)
-			c.Pub("dfd")
+			c.Pub(`{"dd":"ee}`)
 			time.Sleep(3 * time.Second)
 			c.Pub("ddd")
 			time.Sleep(1 * time.Second)

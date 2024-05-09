@@ -9,14 +9,25 @@ import (
 )
 
 type InMemoryBroker struct {
-	queues map[string][]string
+	queues map[string]queue
 	mutex  sync.RWMutex
 }
 
 func NewInMemoryBroker() *InMemoryBroker {
 	return &InMemoryBroker{
-		queues: make(map[string][]string),
+		queues: make(map[string]queue),
 	}
+}
+
+func (broker *InMemoryBroker) NewTopic(topic string) error {
+	_, found := broker.queues[topic]
+	if found {
+		return errors.New("there is topic already")
+	}
+
+	broker.queues[topic] = NewQueue()
+
+	return nil
 }
 
 func (broker *InMemoryBroker) HandleConnection(conn net.Conn) {
@@ -28,9 +39,9 @@ func (broker *InMemoryBroker) HandleConnection(conn net.Conn) {
 		count, _ := conn.Read(buffer)
 		//conn.Write(buffer[:count])
 		if count > 0 {
-			//parse topic
-			broker.Enqueue("topic", string(buffer))
-			log.Printf(fmt.Sprintf("%s", buffer))
+			evt := "evt"
+			broker.Enqueue("topic", evt)
+			log.Printf(fmt.Sprintf("%s", buffer[:count]))
 		}
 	}
 }
@@ -38,20 +49,23 @@ func (broker *InMemoryBroker) HandleConnection(conn net.Conn) {
 func (broker *InMemoryBroker) Enqueue(topic string, event string) {
 	broker.mutex.Lock()
 
-	broker.queues[topic] = append(broker.queues[topic], event)
+	broker.queues[topic].enQueue(event)
 
 	defer broker.mutex.Unlock()
 }
 
-func (broker *InMemoryBroker) Dequeue(topic string) (string, error) {
+func (broker *InMemoryBroker) Dequeue(topic string) (interface{}, error) {
 	broker.mutex.Lock()
 
 	queue, found := broker.queues[topic]
-	if !found || len(queue) == 0 {
+	if !found || queue.len() == 0 {
 		return "", errors.New("queue is empty : nothing to dequeue")
 	}
 
-	event := queue[0]
+	event, err := queue.deQueue()
+	if err != nil {
+		return "", errors.New("cannot dequeue")
+	}
 
 	defer broker.mutex.Unlock()
 
@@ -62,16 +76,16 @@ func (broker *InMemoryBroker) Commit(topic string) error {
 	broker.mutex.Lock()
 
 	queue, found := broker.queues[topic]
-	if !found || len(queue) == 0 {
+	if !found || queue.len() == 0 {
 		return errors.New("queue is empty : nothing to commit")
 	}
 
-	broker.queues[topic] = queue[1:]
+	//commit
 
 	defer broker.mutex.Lock()
 	return nil
 }
 
-func (broker *InMemoryBroker) GetQueue(topic string) []string {
+func (broker *InMemoryBroker) GetQueue(topic string) queue {
 	return broker.queues[topic]
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"go-event-queue/server/api"
-	_ "go-event-queue/server/api" //api
 	"go-event-queue/server/broker"
 	"sync"
 )
@@ -17,6 +16,7 @@ func main() {
 		defer wg.Done()
 		b := broker.NewInMemoryBroker()
 		api.InjectBroker(b)
+		b.NewTopic("topic")
 		broker.RunBroker(b)
 	}()
 
