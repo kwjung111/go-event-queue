@@ -30,6 +30,10 @@ func brokerHandler(b broker.Broker) http.HandlerFunc {
 	}
 }
 
+func NewQueue() {
+
+}
+
 func InjectBroker(b broker.Broker) {
 	go func() {
 		http.HandleFunc("/", brokerHandler(b))

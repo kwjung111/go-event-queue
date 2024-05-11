@@ -1,9 +1,11 @@
 package broker
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
+	"io"
 	"net"
 	"sync"
 )
@@ -25,7 +27,7 @@ func (broker *InMemoryBroker) NewTopic(topic string) error {
 		return errors.New("there is topic already")
 	}
 
-	broker.queues[topic] = NewQueue()
+	broker.queues[topic] = NewDirectQueue()
 
 	return nil
 }
@@ -33,17 +35,44 @@ func (broker *InMemoryBroker) NewTopic(topic string) error {
 func (broker *InMemoryBroker) HandleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	log.Println("Waiting for events...")
-	buffer := make([]byte, 1024)
 	for {
-		count, _ := conn.Read(buffer)
-		//conn.Write(buffer[:count])
-		if count > 0 {
-			evt := "evt"
-			broker.Enqueue("topic", evt)
-			log.Printf(fmt.Sprintf("%s", buffer[:count]))
+		var length uint32
+
+		if err := binary.Read(conn, binary.BigEndian, &length); err != nil {
+			if err == io.EOF {
+				fmt.Println("Client closed the connection")
+			} else {
+				fmt.Println("Error reading length :", err)
+			}
+			return
 		}
+
+		data := make([]byte, length)
+
+		if _, err := readFull(conn, data); err != nil {
+			fmt.Println("Error reading data :", err)
+		}
+
+		event, err := deserializeEvent(data)
+		if err != nil {
+			fmt.Println("Error deserializing event:", err)
+			return
+		}
+
+		fmt.Printf("Received: %+v\n", event)
 	}
+}
+
+func readFull(conn net.Conn, buf []byte) (int, error) {
+	totalRead := 0
+	for totalRead < len(buf) {
+		n, err := conn.Read(buf[totalRead:])
+		if err != nil {
+			return totalRead, err
+		}
+		totalRead += n
+	}
+	return totalRead, nil
 }
 
 func (broker *InMemoryBroker) Enqueue(topic string, event string) {
@@ -88,4 +117,43 @@ func (broker *InMemoryBroker) Commit(topic string) error {
 
 func (broker *InMemoryBroker) GetQueue(topic string) queue {
 	return broker.queues[topic]
+}
+
+func deserializeEvent(data []byte) (Event, error) {
+	buffer := bytes.NewBuffer(data)
+	var event Event
+
+	var methodlen uint32
+	var topiclen uint32
+	var msglen uint32
+
+	// MethodLength, Method, TopicLength, Topic, MessageLength, Message를 순서대로 읽기
+	if err := binary.Read(buffer, binary.BigEndian, &methodlen); err != nil {
+		return event, err
+	}
+	method := make([]byte, methodlen)
+	if _, err := buffer.Read(method); err != nil {
+		return event, err
+	}
+	event.Method = string(method)
+
+	if err := binary.Read(buffer, binary.BigEndian, &topiclen); err != nil {
+		return event, err
+	}
+	topic := make([]byte, topiclen)
+	if _, err := buffer.Read(topic); err != nil {
+		return event, err
+	}
+	event.Topic = string(topic)
+
+	if err := binary.Read(buffer, binary.BigEndian, &msglen); err != nil {
+		return event, err
+	}
+	message := make([]byte, msglen)
+	if _, err := buffer.Read(message); err != nil {
+		return event, err
+	}
+	event.Message = string(message)
+
+	return event, nil
 }
