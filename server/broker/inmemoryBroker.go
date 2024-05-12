@@ -1,7 +1,6 @@
 package broker
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -21,13 +20,19 @@ func NewInMemoryBroker() *InMemoryBroker {
 	}
 }
 
-func (broker *InMemoryBroker) NewTopic(topic string) error {
+func (broker *InMemoryBroker) NewTopic(topic string, qType string) error {
 	_, found := broker.queues[topic]
 	if found {
 		return errors.New("there is topic already")
 	}
-
-	broker.queues[topic] = NewDirectQueue()
+	switch qType {
+	case "broadcast":
+	case "roundrobin":
+	case "direct":
+		broker.queues[topic] = NewDirectQueue()
+	default:
+		fmt.Println("wrong type")
+	}
 
 	return nil
 }
@@ -41,6 +46,8 @@ func (broker *InMemoryBroker) HandleConnection(conn net.Conn) {
 		if err := binary.Read(conn, binary.BigEndian, &length); err != nil {
 			if err == io.EOF {
 				fmt.Println("Client closed the connection")
+			} else if err == net.ErrClosed {
+				fmt.Println("Connection closed by the remote host")
 			} else {
 				fmt.Println("Error reading length :", err)
 			}
@@ -59,6 +66,8 @@ func (broker *InMemoryBroker) HandleConnection(conn net.Conn) {
 			return
 		}
 
+		broker.Enqueue(event.Topic, event.Message)
+
 		fmt.Printf("Received: %+v\n", event)
 	}
 }
@@ -75,15 +84,28 @@ func readFull(conn net.Conn, buf []byte) (int, error) {
 	return totalRead, nil
 }
 
-func (broker *InMemoryBroker) Enqueue(topic string, event string) {
+func (broker *InMemoryBroker) Enqueue(topic string, message string) error {
+
+	if !broker.HasTopic(topic) {
+		return &topicNotFoundError{topic: topic}
+	}
+
 	broker.mutex.Lock()
 
-	broker.queues[topic].enQueue(event)
+	broker.queues[topic].enQueue(message)
 
 	defer broker.mutex.Unlock()
+
+	return nil
 }
 
 func (broker *InMemoryBroker) Dequeue(topic string) (interface{}, error) {
+
+	if !broker.HasTopic(topic) {
+		fmt.Printf("topic not exists: %s", topic)
+		return nil, &topicNotFoundError{topic: topic}
+	}
+
 	broker.mutex.Lock()
 
 	queue, found := broker.queues[topic]
@@ -91,14 +113,14 @@ func (broker *InMemoryBroker) Dequeue(topic string) (interface{}, error) {
 		return "", errors.New("queue is empty : nothing to dequeue")
 	}
 
-	event, err := queue.deQueue()
+	message, err := queue.deQueue()
 	if err != nil {
 		return "", errors.New("cannot dequeue")
 	}
 
 	defer broker.mutex.Unlock()
 
-	return event, nil
+	return message, nil
 }
 
 func (broker *InMemoryBroker) Commit(topic string) error {
@@ -115,45 +137,35 @@ func (broker *InMemoryBroker) Commit(topic string) error {
 	return nil
 }
 
+func (broker *InMemoryBroker) HasTopic(topic string) bool {
+	_, ok := broker.queues[topic]
+	return ok
+}
+
 func (broker *InMemoryBroker) GetQueue(topic string) queue {
 	return broker.queues[topic]
 }
 
-func deserializeEvent(data []byte) (Event, error) {
-	buffer := bytes.NewBuffer(data)
-	var event Event
+func (broker *InMemoryBroker) GetTopics() []string {
+	broker.mutex.RLock()
+	defer broker.mutex.RUnlock()
 
-	var methodlen uint32
-	var topiclen uint32
-	var msglen uint32
+	keys := make([]string, 0, len(broker.queues))
+	for key := range broker.queues {
+		keys = append(keys, key)
+	}
 
-	// MethodLength, Method, TopicLength, Topic, MessageLength, Message를 순서대로 읽기
-	if err := binary.Read(buffer, binary.BigEndian, &methodlen); err != nil {
-		return event, err
-	}
-	method := make([]byte, methodlen)
-	if _, err := buffer.Read(method); err != nil {
-		return event, err
-	}
-	event.Method = string(method)
+	return keys
+}
 
-	if err := binary.Read(buffer, binary.BigEndian, &topiclen); err != nil {
-		return event, err
-	}
-	topic := make([]byte, topiclen)
-	if _, err := buffer.Read(topic); err != nil {
-		return event, err
-	}
-	event.Topic = string(topic)
+func (broker *InMemoryBroker) GetEvents(topic string) ([]string, error) {
+	broker.mutex.RLock()
+	defer broker.mutex.RUnlock()
 
-	if err := binary.Read(buffer, binary.BigEndian, &msglen); err != nil {
-		return event, err
+	if !broker.HasTopic(topic) {
+		return nil, &topicNotFoundError{topic: topic}
 	}
-	message := make([]byte, msglen)
-	if _, err := buffer.Read(message); err != nil {
-		return event, err
-	}
-	event.Message = string(message)
 
-	return event, nil
+	queue := broker.queues[topic].View()
+	return queue, nil
 }

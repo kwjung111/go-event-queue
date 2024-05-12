@@ -8,12 +8,15 @@ import (
 )
 
 type Broker interface {
-	NewTopic(string) error
-	Enqueue(string, string)
+	NewTopic(string, string) error
+	Enqueue(string, string) error
 	Dequeue(string) (interface{}, error)
+	HasTopic(string) bool
 	Commit(string) error
 	HandleConnection(net.Conn)
 	GetQueue(string) queue
+	GetTopics() []string
+	GetEvents(string) ([]string, error)
 }
 
 func RunBroker(broker Broker) {

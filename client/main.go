@@ -23,12 +23,10 @@ func main() {
 			c.Push(`{"dd":"ee}`)
 			time.Sleep(3 * time.Second)
 			c.Push("ddd")
-			time.Sleep(1 * time.Second)
+			time.Sleep(2 * time.Second)
 			defer wg.Done()
 		}()
 	}
-
-	time.Sleep(5000 * time.Second)
 
 	close(done)
 

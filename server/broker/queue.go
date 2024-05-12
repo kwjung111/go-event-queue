@@ -2,7 +2,7 @@ package broker
 
 type queue interface {
 	enQueue(interface{})
-	deQueue() (interface{}, error)
+	deQueue() (string, error)
 	len() int
-	View() []interface{}
+	View() []string
 }

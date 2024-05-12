@@ -1,42 +1,72 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"go-event-queue/server/broker"
 	"net/http"
+	"strings"
 )
 
 func init() {
 
 }
 
-func brokerHandler(b broker.Broker) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		queue := b.GetQueue("topic")
+func ErrorResponse(w http.ResponseWriter, err error, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	fmt.Fprintf(w, `{"error": "%s"}`, err.Error())
+}
 
-		var output string
-		data := queue.View()
-		for _, value := range data {
-			output += fmt.Sprintf("%v, ", value)
+func getEvents(b broker.Broker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(r.URL.Path, "/")
+		topic := parts[len(parts)-1]
+		events, err := b.GetEvents(topic)
+		if err != nil {
+			ErrorResponse(w, err, http.StatusInternalServerError)
+			return
+		}
+		for _, event := range events {
+			fmt.Printf(event)
 		}
 
-		// 마지막 쉼표와 공백 제거
-		output = output[:len(output)-2]
+		eventsJSON, err := json.Marshal(events)
+		if err != nil {
+			fmt.Printf("error convert json : %s", err)
+			http.Error(w, "Faild to convert json", http.StatusInternalServerError)
+			return
+		}
 
-		// JSON 데이터를 클라이언트에게 반환
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(output))
+		w.Write(eventsJSON)
 	}
 }
 
-func NewQueue() {
+func getTopics(b broker.Broker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		topics := b.GetTopics()
 
+		topicsJSON, err := json.Marshal(topics)
+		if err != nil {
+			fmt.Printf("error convert json : %s", err)
+			http.Error(w, "Faild to convert json", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(topicsJSON)
+	}
 }
 
 func InjectBroker(b broker.Broker) {
+	http.HandleFunc("/topics", getTopics(b))
+	http.HandleFunc("/events/", getEvents(b))
+}
+func RunApiServer() {
 	go func() {
-		http.HandleFunc("/", brokerHandler(b))
 		http.ListenAndServe(":8080", nil)
 	}()
 }
