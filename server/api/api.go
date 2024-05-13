@@ -44,26 +44,70 @@ func getEvents(b broker.Broker) http.HandlerFunc {
 	}
 }
 
-func getTopics(b broker.Broker) http.HandlerFunc {
+func getTopic(w http.ResponseWriter, r *http.Request, b broker.Broker) {
+	topics := b.GetTopics()
+
+	topicsJSON, err := json.Marshal(topics)
+	if err != nil {
+		fmt.Printf("error convert json : %s", err)
+		http.Error(w, "Faild to convert json", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(topicsJSON)
+}
+
+func setNewDirectTopic(w http.ResponseWriter, r *http.Request, b broker.Broker) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var jsonData map[string]interface{}
+	err := json.NewDecoder(r.Body).Decode(&jsonData)
+	if err != nil {
+		http.Error(w, "Failed to parse json data", http.StatusInternalServerError)
+	}
+
+	topic, ok := jsonData["topic"].(string)
+	if !ok {
+		http.Error(w, "no \"topic\" filed ", http.StatusBadRequest)
+		return
+	}
+
+	if topic == "" {
+		http.Error(w, "Topic cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	b.NewTopic(topic, "Direct")
+
+	w.WriteHeader(http.StatusCreated)
+	fmt.Fprintf(w, "New Topic has Created : %s", topic)
+}
+
+func topicHandler(b broker.Broker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		topics := b.GetTopics()
-
-		topicsJSON, err := json.Marshal(topics)
-		if err != nil {
-			fmt.Printf("error convert json : %s", err)
-			http.Error(w, "Faild to convert json", http.StatusInternalServerError)
-			return
+		switch r.Method {
+		case http.MethodGet:
+			getTopic(w, r, b)
+		case http.MethodPost:
+			setNewDirectTopic(w, r, b)
+		default:
+			notAllowedMethod(w)
 		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write(topicsJSON)
 	}
 }
 
+func notAllowedMethod(w http.ResponseWriter) {
+	http.Error(w, "Method not Allowed", http.StatusMethodNotAllowed)
+}
+
 func InjectBroker(b broker.Broker) {
-	http.HandleFunc("/topics", getTopics(b))
-	http.HandleFunc("/events/", getEvents(b))
+	http.HandleFunc("/topic", topicHandler(b))
+	http.HandleFunc("/event/", getEvents(b))
 }
 func RunApiServer() {
 	go func() {

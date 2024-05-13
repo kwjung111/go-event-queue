@@ -26,13 +26,15 @@ func (broker *InMemoryBroker) NewTopic(topic string, qType string) error {
 		return errors.New("there is topic already")
 	}
 	switch qType {
-	case "broadcast":
-	case "roundrobin":
-	case "direct":
+	case "Broadcast":
+	case "Roundrobin":
+	case "Direct":
 		broker.queues[topic] = NewDirectQueue()
 	default:
-		fmt.Println("wrong type")
+		fmt.Printf("wrong topic type : %s", qType)
 	}
+
+	fmt.Printf("New Topic Created : %s", topic)
 
 	return nil
 }
@@ -49,26 +51,31 @@ func (broker *InMemoryBroker) HandleConnection(conn net.Conn) {
 			} else if err == net.ErrClosed {
 				fmt.Println("Connection closed by the remote host")
 			} else {
-				fmt.Println("Error reading length :", err)
+				fmt.Printf("Error reading length : %s\n", err)
 			}
+			//connection end
 			return
 		}
 
 		data := make([]byte, length)
 
 		if _, err := readFull(conn, data); err != nil {
-			fmt.Println("Error reading data :", err)
+			fmt.Printf("client %s => Error reading data : %s\n", conn.RemoteAddr(), err)
+			continue
 		}
 
 		event, err := deserializeEvent(data)
 		if err != nil {
-			fmt.Println("Error deserializing event:", err)
-			return
+			fmt.Printf("client %s => Error deserializing event: %s\n", conn.RemoteAddr(), err)
+			continue
 		}
 
-		broker.Enqueue(event.Topic, event.Message)
-
-		fmt.Printf("Received: %+v\n", event)
+		errEnq := broker.Enqueue(event.Topic, event.Message)
+		if errEnq != nil {
+			fmt.Printf("client %s => Error while Enqueue : %s\n", conn.RemoteAddr(), errEnq)
+			continue
+		}
+		fmt.Printf("client %s => Received: %+v\n", conn.RemoteAddr(), event)
 	}
 }
 
