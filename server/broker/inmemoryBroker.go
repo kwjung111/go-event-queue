@@ -106,14 +106,14 @@ func (broker *InMemoryBroker) Enqueue(topic string, message string) error {
 	return nil
 }
 
-func (broker *InMemoryBroker) Dequeue(topic string) (interface{}, error) {
+func (broker *InMemoryBroker) Dequeue(topic string) (string, error) {
 
 	if !broker.HasTopic(topic) {
-		fmt.Printf("topic not exists: %s", topic)
-		return nil, &topicNotFoundError{topic: topic}
+		return "", &topicNotFoundError{topic: topic}
 	}
 
 	broker.mutex.Lock()
+	defer broker.mutex.Unlock()
 
 	queue, found := broker.queues[topic]
 	if !found || queue.len() == 0 {
@@ -124,8 +124,6 @@ func (broker *InMemoryBroker) Dequeue(topic string) (interface{}, error) {
 	if err != nil {
 		return "", errors.New("cannot dequeue")
 	}
-
-	defer broker.mutex.Unlock()
 
 	return message, nil
 }

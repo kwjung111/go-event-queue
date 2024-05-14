@@ -10,7 +10,7 @@ import (
 type Broker interface {
 	NewTopic(string, string) error
 	Enqueue(string, string) error
-	Dequeue(string) (interface{}, error)
+	Dequeue(string) (string, error)
 	HasTopic(string) bool
 	Commit(string) error
 	HandleConnection(net.Conn)

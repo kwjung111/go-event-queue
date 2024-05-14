@@ -59,6 +59,22 @@ func getTopic(w http.ResponseWriter, r *http.Request, b broker.Broker) {
 	w.Write(topicsJSON)
 }
 
+func dequeueTestFunc(w http.ResponseWriter, r *http.Request, b broker.Broker) {
+
+	topic := "topic"
+
+	msg, err := b.Dequeue(topic)
+	if err != nil {
+		fmt.Println("error while deq : %s", err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	fmt.Println([]byte(msg))
+	w.Write([]byte(msg))
+}
+
 func setNewDirectTopic(w http.ResponseWriter, r *http.Request, b broker.Broker) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not Allowed", http.StatusMethodNotAllowed)
@@ -88,19 +104,6 @@ func setNewDirectTopic(w http.ResponseWriter, r *http.Request, b broker.Broker) 
 	fmt.Fprintf(w, "New Topic has Created : %s", topic)
 }
 
-func topicHandler(b broker.Broker) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			getTopic(w, r, b)
-		case http.MethodPost:
-			setNewDirectTopic(w, r, b)
-		default:
-			notAllowedMethod(w)
-		}
-	}
-}
-
 func notAllowedMethod(w http.ResponseWriter) {
 	http.Error(w, "Method not Allowed", http.StatusMethodNotAllowed)
 }
@@ -108,7 +111,9 @@ func notAllowedMethod(w http.ResponseWriter) {
 func InjectBroker(b broker.Broker) {
 	http.HandleFunc("/topic", topicHandler(b))
 	http.HandleFunc("/event/", getEvents(b))
+	http.HandleFunc("/test", testHandler(b))
 }
+
 func RunApiServer() {
 	go func() {
 		http.ListenAndServe(":8080", nil)
