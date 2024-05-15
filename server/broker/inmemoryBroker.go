@@ -70,12 +70,37 @@ func (broker *InMemoryBroker) HandleConnection(conn net.Conn) {
 			continue
 		}
 
-		errEnq := broker.Enqueue(event.Topic, event.Message)
-		if errEnq != nil {
-			fmt.Printf("client %s => Error while Enqueue : %s\n", conn.RemoteAddr(), errEnq)
+		switch event.Method {
+		case "PUSH":
+			errEnq := broker.Enqueue(event.Topic, event.Message)
+			if errEnq != nil {
+				fmt.Printf("client %s => Error while Enqueue : %s\n", conn.RemoteAddr(), errEnq)
+				continue
+			}
+			fmt.Printf("client %s => Received: %+v\n", conn.RemoteAddr(), event)
+
+		case "PULL":
+			msg, errDeq := broker.Dequeue(event.Topic)
+			if errDeq != nil {
+				fmt.Printf("client %s => Error while Dequeue : %s\n", conn.RemoteAddr(), errDeq)
+				continue
+			}
+
+			evt := Event{
+				Method:  "PULLRES",
+				Topic:   event.Topic,
+				Message: msg,
+			}
+
+			err := broker.write(evt, conn)
+			if err != nil {
+				fmt.Printf("client %s => Error while write : %s\n", conn.RemoteAddr(), errDeq)
+				continue
+			}
+			fmt.Printf("client %s => Dequeued : %s\n", conn.RemoteAddr(), msg)
+		default:
 			continue
 		}
-		fmt.Printf("client %s => Received: %+v\n", conn.RemoteAddr(), event)
 	}
 }
 
@@ -173,4 +198,21 @@ func (broker *InMemoryBroker) GetEvents(topic string) ([]string, error) {
 
 	queue := broker.queues[topic].View()
 	return queue, nil
+}
+
+func (broker *InMemoryBroker) write(evt Event, conn net.Conn) error {
+	bEvt, err := serializeEvent(evt)
+	if err != nil {
+		return fmt.Errorf("serialize error : %v", err)
+	}
+
+	length := uint32(len(bEvt))
+	if err := binary.Write(conn, binary.BigEndian, length); err != nil {
+		return err
+	}
+
+	if _, err := conn.Write(bEvt); err != nil {
+		return err
+	}
+	return nil
 }

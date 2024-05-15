@@ -1,7 +1,8 @@
 package main
 
 import (
-	"go-event-queue/client/client"
+	"client/producer"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -9,7 +10,7 @@ import (
 
 func main() {
 
-	log.Printf("client start")
+	log.Printf("start")
 	var wg sync.WaitGroup
 
 	done := make(chan struct{})
@@ -17,18 +18,21 @@ func main() {
 	for i := 0; i < 3; i++ {
 		wg.Add(1)
 		go func() {
-			c := client.NewClient("topic")
-			go c.Run(done)
-			time.Sleep(3 * time.Second)
-			c.Push(`{"dd":"ee"}`)
-			time.Sleep(3 * time.Second)
-			//c.Push("ddd")
-			time.Sleep(2 * time.Second)
+			p := producer.NewProducer("topic")
+			go p.Run(done)
 			defer wg.Done()
+			//p.Ping()
+			time.Sleep(3 * time.Second)
+
+			err := p.Push(`{"dd":"ee"}`)
+			if err != nil {
+				fmt.Printf("error while publishing : %s\n", err)
+				return
+			}
+
+			time.Sleep(3 * time.Second)
 		}()
 	}
-
-	close(done)
-
 	wg.Wait()
+	close(done)
 }
