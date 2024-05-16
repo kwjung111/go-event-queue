@@ -10,13 +10,16 @@ import (
 )
 
 type InMemoryBroker struct {
-	queues map[string]queue
-	mutex  sync.RWMutex
+	queues   map[string]queue
+	rrQueues map[string]queue
+	channel  <-chan Event
+	mutex    sync.RWMutex
 }
 
 func NewInMemoryBroker() *InMemoryBroker {
 	return &InMemoryBroker{
-		queues: make(map[string]queue),
+		queues:   make(map[string]queue),
+		rrQueues: make(map[string]queue),
 	}
 }
 
@@ -28,6 +31,7 @@ func (broker *InMemoryBroker) NewTopic(topic string, qType string) error {
 	switch qType {
 	case "Broadcast":
 	case "Roundrobin":
+		broker.rrQueues[topic] = NewRoundRobinQueue()
 	case "Direct":
 		broker.queues[topic] = NewDirectQueue()
 	default:
@@ -102,6 +106,10 @@ func (broker *InMemoryBroker) HandleConnection(conn net.Conn) {
 			continue
 		}
 	}
+}
+
+func (broker *InMemoryBroker) distribute() {
+
 }
 
 func readFull(conn net.Conn, buf []byte) (int, error) {
@@ -196,7 +204,7 @@ func (broker *InMemoryBroker) GetEvents(topic string) ([]string, error) {
 		return nil, &topicNotFoundError{topic: topic}
 	}
 
-	queue := broker.queues[topic].View()
+	queue := broker.queues[topic].view()
 	return queue, nil
 }
 

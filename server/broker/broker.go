@@ -14,6 +14,7 @@ type Broker interface {
 	HasTopic(string) bool
 	Commit(string) error
 	HandleConnection(net.Conn)
+	distribute()
 	GetQueue(string) queue
 	GetTopics() []string
 	GetEvents(string) ([]string, error)
@@ -42,5 +43,8 @@ func RunBroker(broker Broker) {
 		log.Printf("Client %s connected", conn.RemoteAddr())
 
 		go broker.HandleConnection(conn)
+
+		go broker.distribute()
 	}
+
 }

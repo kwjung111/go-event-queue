@@ -32,7 +32,7 @@ func (q *directQueue) len() int {
 	return q.list.Len()
 }
 
-func (q *directQueue) View() []string {
+func (q *directQueue) view() []string {
 	result := make([]string, 0, q.list.Len())
 
 	for e := q.list.Front(); e != nil; e = e.Next() {
