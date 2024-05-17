@@ -11,7 +11,7 @@ import (
 
 type InMemoryBroker struct {
 	queues   map[string]queue
-	rrQueues map[string]queue
+	rrQueues map[string]*roundRobinQueue
 	channel  <-chan Event
 	mutex    sync.RWMutex
 }
@@ -19,7 +19,7 @@ type InMemoryBroker struct {
 func NewInMemoryBroker() *InMemoryBroker {
 	return &InMemoryBroker{
 		queues:   make(map[string]queue),
-		rrQueues: make(map[string]queue),
+		rrQueues: make(map[string]*roundRobinQueue),
 	}
 }
 
@@ -109,7 +109,21 @@ func (broker *InMemoryBroker) HandleConnection(conn net.Conn) {
 }
 
 func (broker *InMemoryBroker) distribute() {
-
+	for _, r := range broker.rrQueues {
+		go func() {
+			select {
+			case event := <-r.channel:
+				if len(r.listener) > 0 {
+					switch event.Method {
+					case "PUSH":
+						directQ := r.listener[r.next]
+						directQ.enQueue(event.Message)
+						r.next = (r.next + 1) % len(r.listener)
+					}
+				}
+			}
+		}()
+	}
 }
 
 func readFull(conn net.Conn, buf []byte) (int, error) {

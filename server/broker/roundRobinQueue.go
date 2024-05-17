@@ -3,17 +3,23 @@ package broker
 import (
 	"container/list"
 	"errors"
+	"sync"
 )
 
 type roundRobinQueue struct {
 	listener []*directQueue
 	list     *list.List
+	mu       sync.Mutex
+	channel  <-chan Event
+	next     int
 }
 
 func NewRoundRobinQueue() *roundRobinQueue {
 	return &roundRobinQueue{
 		listener: make([]*directQueue, 0),
 		list:     list.New(),
+		next:     0,
+		channel:  make(chan Event),
 	}
 }
 
@@ -46,12 +52,4 @@ func (r *roundRobinQueue) view() []string {
 	}
 
 	return result
-}
-
-func run() {
-	go func() {
-
-		select {}
-
-	}()
 }
